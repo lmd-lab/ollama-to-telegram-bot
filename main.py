@@ -43,7 +43,7 @@ def ask_ollama(prompt: str) -> str:
             "model": MODEL,
             "prompt": prompt,
             "stream": False
-        }, timeout=60)
+        }, timeout=60) # maybe too short for some models
 
         print(response.json())
         print(response.json()["response"])
