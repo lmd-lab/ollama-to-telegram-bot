@@ -21,3 +21,9 @@
 
 .vscode/
 .venv/
+__pycache__/
+
+# Ignore sttings, history and log files
+*.json
+*.log
+logs/
