@@ -63,9 +63,9 @@ For scheduled execution on Linux systems, you can use the provided systemd servi
 1. The Chat Bot (Always On)
 
 ```bash
-sudo cp systemd/ollama_telegram_bot.service.example /etc/systemd/system/ollama_telegram_bot.service
-# Edit paths in /etc/systemd/system/ollama_telegram_bot.service
-sudo systemctl enable --now ollama_telegram_bot.service
+sudo cp systemd/ollama_chat.service.example /etc/systemd/system/ollama_chat.service
+# Edit paths in /etc/systemd/system/ollama_chat.service
+sudo systemctl enable --now ollama_chat.service
 ```
 
 2. The Reminder (Scheduled)
@@ -89,7 +89,7 @@ systemctl list-timers --all | grep ollama
 **Manual Test:**
 Trigger the reminder immediately without waiting for the timer:
 ```bash
-sudo systemctl start ollama_telegram_bot.service
+sudo systemctl start ollama_chat.service
 ```
 
 **View live logs:**
@@ -101,7 +101,7 @@ tail -f logs/generate_script.log
 
 Or use the systemd journal:
 ```bash
-journalctl -u ollama_telegram_bot.service -f
+journalctl -u ollama_chat.service -f
 ```
 
 ### Customizing the Schedule
