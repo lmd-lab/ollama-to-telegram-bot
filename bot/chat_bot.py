@@ -7,6 +7,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -16,26 +17,9 @@ from telegram.ext import (
     filters,
 )
 
-# Config -----------------------------------------------------------------------------
+# Config & Paths ---------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=BASE_DIR / ".env")
-
-HISTORY_FILE = BASE_DIR / "chat_history.json"
-SETTINGS_FILE = BASE_DIR / "chat_settings.json"
-
-OLLAMA_URL = os.getenv("OLLAMA_CHAT_URL", "http://localhost:11434/api/chat")
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b") 
-
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-RAW_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-CHAT_ID = int(RAW_CHAT_ID)
-
-AVAILABLE_MODELS = {
-    "llama": "llama3.2:1b",
-    "qwen": "qwen2.5:1.5b",
-}
-
-MAX_HISTORY = int(os.getenv("MAX_HISTORY", "20"))
 
 # Logging ----------------------------------------------------------------------------
 LOG_DIR = BASE_DIR / "logs"
@@ -49,6 +33,7 @@ file_handler = RotatingFileHandler(
     encoding="utf-8"
 )
 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -57,9 +42,43 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Files -----------------------------------------------------------------------------
+HISTORY_FILE = BASE_DIR / "chat_history.json"
+SETTINGS_FILE = BASE_DIR / "chat_settings.json"
+
+OLLAMA_URL = os.getenv("OLLAMA_CHAT_URL", "http://localhost:11434/api/chat")
+DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b") 
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not TELEGRAM_TOKEN:
+    raise RuntimeError("TELEGRAM_TOKEN is not set in the environment. Please set it in your .env file or environment variables.")
+
+RAW_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+if RAW_CHAT_ID is None:
+    raise ValueError("TELEGRAM_CHAT_ID environment variable is missing.")
+try:
+    CHAT_ID = int(RAW_CHAT_ID)
+except (TypeError, ValueError):
+    logger.error(f"Invalid TELEGRAM_CHAT_ID: '{RAW_CHAT_ID}' is not a valid integer.")
+    raise RuntimeError("Invalid TELEGRAM_CHAT_ID: must be set to a valid integer in your .env file.")
+
+AVAILABLE_MODELS = {
+    "llama": "llama3.2:1b",
+    "qwen": "qwen2.5:1.5b",
+}
+
+try:
+    MAX_HISTORY = int(os.getenv("MAX_HISTORY", "20"))
+    if MAX_HISTORY < 1:
+        raise ValueError
+except (TypeError, ValueError):
+    logger.warning("Invalid MAX_HISTORY environment variable. Using default value 20.")
+    MAX_HISTORY = 20
+
+
 # Conversation context & settings ----------------------------------------------------
-chat_histories = {}  # {chat_id: [{"timestamp","role": "user", "content": "..."}, ...]}
-chat_settings = {}   # {chat_id: {"model": "...", "offset": 0}}
+chat_histories = {} # {chat_id (int): [{"timestamp": ..., "role": "user"/"assistant", "content": ...}, ...]}
+chat_settings = {} # {chat_id (int): {"model": str, "offset": int}}
 
 def load_histories():
     """Loads chat histories from the JSON file on startup."""
@@ -82,15 +101,6 @@ def save_histories():
     except Exception as e:
         logger.error(f"Failed to save history: {e}")
 
-def save_settings():
-    """Saves the current chat settings (models, offsets) to a JSON file."""
-    try:
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(chat_settings, f, ensure_ascii=False, indent=4)
-        logger.info("Settings saved to file.")
-    except Exception as e:
-        logger.error(f"Failed to save settings: {e}")
-
 def load_settings():
     """Loads the current chat settings (models, offsets) from a JSON file."""
     global chat_settings
@@ -105,6 +115,15 @@ def load_settings():
             logger.error(f"Failed to load settings: {e}")
     else:
         logger.info("No settings file found. Starting with empty settings.")
+
+def save_settings():
+    """Saves the current chat settings (models, offsets) to a JSON file."""
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(chat_settings, f, ensure_ascii=False, indent=4)
+        logger.info("Settings saved to file.")
+    except Exception as e:
+        logger.error(f"Failed to save settings: {e}")
 
 # Helper functions ----------------------------------------------------------------------
 async def notify_me(text):
@@ -217,19 +236,20 @@ async def query_ollama(chat_id: int, prompt: str) -> str:
         return f"An unexpected error occurred: {str(e)}"
 
 # Telegram-Handlers ----------------------------------------------------------------------
-async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update): return 
 
     current_model = get_model(update.effective_chat.id)
-    await update.message.reply_text(
+    help_text = (
         f"Hi! I am your Ollama bot (Model: *{current_model}*).\n"
         "Just send me a message, or switch the model using /model.\n" 
         "Use /stats to view message statistics.\n" 
-        "Use /clear to reset our conversation history (keeps messages in archive).\n\n",
-        parse_mode="Markdown",
+        "Use /clear to reset our conversation history (keeps messages in archive).\n"
+        f"Or /clear and any number between 1 and {MAX_HISTORY} to reduce remembered messages to that number (keeps messages in archive).\n\n"
     )
+    await update.message.reply_text(help_text, parse_mode="Markdown")
 
-async def model(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def model_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update): return
 
     keyboard = [
@@ -260,6 +280,7 @@ async def model_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
     query = update.callback_query
+    chat_id = query.message.chat.id
     await query.answer()
 
     chat_id = query.message.chat_id
@@ -283,20 +304,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
     user_text = update.message.text
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     reply = await query_ollama(chat_id, user_text)
     await update.message.reply_text(reply)
 
-async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update): return
-
     chat_id = update.effective_chat.id
-    new_offset = len(get_history(chat_id))
-    set_offset(chat_id, new_offset)
-    logger.info(f"Chat {chat_id} history cleared (new offset: {new_offset})")
-    await update.message.reply_text("Memory cleared for AI!")
+    history = get_history(chat_id)
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:     
+        new_offset = len(history)
+        set_offset(chat_id, new_offset)
+        logger.info(f"Chat {chat_id} history cleared (new offset: {new_offset})")
+        await update.message.reply_text("Memory cleared for AI!")
+        return
+
+    try:        
+        number = int(context.args[0])
+        if 1 <= number <= MAX_HISTORY:
+            new_offset = max(len(history) - number, 0)
+            set_offset(chat_id, new_offset)
+            logger.info(f"Chat {chat_id} history cleared to last {number} messages (new offset: {new_offset})")
+            await update.message.reply_text(f"Memory cleared to last {number} messages for AI!")
+        else:
+            logger.warning(f"Invalid /clear argument: {context.args[0]} (must be between 1 and {MAX_HISTORY})")
+            await update.message.reply_text(f"Please provide a number between 1 and {MAX_HISTORY}.")
+
+    except ValueError:
+        logger.warning(f"Invalid /clear argument: {context.args[0]} (not a number)")
+        await update.message.reply_text("Invalid argument. Use /clear or /clear <number>.")
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update): return
 
     chat_id = update.effective_chat.id
@@ -306,7 +345,8 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total = len(history)
     visible_history = history[offset:]
     visible = len(visible_history)
-    ai_sees = min(visible, MAX_HISTORY)  # NEU
+    ai_sees = min(visible, MAX_HISTORY) 
+    first_msg_time = history[0]["timestamp"].split("T")[0] if history else "No messages yet"
     first_msg_time = history[0]["timestamp"].split("T")[0] if history else "No messages yet"
     
     await update.message.reply_text(
@@ -328,14 +368,14 @@ def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Handler registrieren
-    app.add_handler(CommandHandler("help", help))
-    app.add_handler(CommandHandler("model", model))
-    app.add_handler(CommandHandler("clear", clear))
-    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("model", model_command))
+    app.add_handler(CommandHandler("clear", clear_command))
+    app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CallbackQueryHandler(model_select, pattern=r"^model_"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("Chat-Bot startet...")
+    logger.info("Chat-Bot starting...")
     app.run_polling()
 
 if __name__ == "__main__":
