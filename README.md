@@ -136,9 +136,9 @@ For more information on systemd timer syntax, see `man systemd.time`.
       [ ] Implement Token-based history slicing for more precise context control.
       [ ] Conversation Summarization: Automatically generate a summary of older messages when the context limit is reached, preserving long-term "memory" while keeping the processing load low.
 
-    [ ] Switch to /api/chat instead of using both endpoints (/api/generate and /api/chat)
-    [ ] Webhook Support: Replace polling with Telegram webhooks for better scalability (advanced).
     [ ] Unit Tests: Add pytest for core functions (e.g., `ask_ollama`).
     [ ] Dockerfile: Containerize the bot for easy deployment.
+
     [ ] Multi-User Support: Allow multiple Chat IDs in a whitelist.
+    [ ] Webhook Support: Replace polling with Telegram webhooks for better scalability (advanced).
     [ ] Secret Management: Integration with Bitwarden CLI.
