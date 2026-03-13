@@ -128,7 +128,13 @@ systemd-analyze calendar "*-*-* 08,10,12,14,16,18,20,22,00:00:00"
 
 For more information on systemd timer syntax, see `man systemd.time`.
 
-## Future Ideas / To-Do
+## Future Ideas / To-Dos
+
+    [ ] Database Migration: Replace the JSON-based history storage with SQLite to prevent O(n) search operations and memory bottlenecks as the history grows.
+    [ ] Data Retention Policy: Implement an automated cleanup logic to prune or archive chat logs older than 30 days.
+    [ ] Context Window Management: 
+      [ ] Implement Token-based history slicing for more precise context control.
+      [ ] Conversation Summarization: Automatically generate a summary of older messages when the context limit is reached, preserving long-term "memory" while keeping the processing load low.
 
     [ ] Switch to /api/chat instead of using both endpoints (/api/generate and /api/chat)
     [ ] Webhook Support: Replace polling with Telegram webhooks for better scalability (advanced).
