@@ -97,7 +97,8 @@ def ask_ollama(prompt: str) -> str:
             response = client.post(OLLAMA_URL, json={
                "model": MODEL,
                "prompt": prompt,
-               "stream": False
+               "stream": False,
+               "keep_alive": 0
             })
             response.raise_for_status()
             data = response.json()

@@ -142,3 +142,7 @@ For more information on systemd timer syntax, see `man systemd.time`.
     [ ] Multi-User Support: Allow multiple Chat IDs in a whitelist.
     [ ] Webhook Support: Replace polling with Telegram webhooks for better scalability (advanced).
     [ ] Secret Management: Integration with Bitwarden CLI.
+
+
+Note: Dual API usage is a design decision: /api/generate is used for standalone tasks where a full conversation context is unnecessary, reducing overhead; api/chat is used for the main conversation flow to leverage structured message history and role-based prompting.
+
