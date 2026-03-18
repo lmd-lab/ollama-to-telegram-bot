@@ -1,36 +1,39 @@
-import os
-import logging
-from pathlib import Path
-import httpx
-import time
 import json
-from filelock import FileLock
-from utils import HISTORY_LOCK
-from logging.handlers import RotatingFileHandler
+import logging
+import os
+import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+import httpx
 from dotenv import load_dotenv
-from utils import safe_load_json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
     CallbackQueryHandler,
+    CommandHandler,
     ContextTypes,
+    MessageHandler,
     filters,
 )
 
+from utils import safe_load_json, HISTORY_LOCK
+from memory_service import load_user_profile
 
-# Config & Paths ---------------------------------------------------------------------
+# Paths -----------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=BASE_DIR / ".env")
 
-# Logging ----------------------------------------------------------------------------
 LOG_DIR = BASE_DIR / "logs"
 LOG_FILE = LOG_DIR / "bot.log"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Logging ----------------------------------------------------------------------------
 file_handler = RotatingFileHandler(
     LOG_FILE, 
     maxBytes=1*1024*1024, 
@@ -46,9 +49,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Files -----------------------------------------------------------------------------
-HISTORY_FILE = BASE_DIR / "chat_history.json"
-SETTINGS_FILE = BASE_DIR / "chat_settings.json"
+# Environment & Settings ---------------------------------------------------------------
+HISTORY_FILE = DATA_DIR / "chat_history.json"
+SETTINGS_FILE = DATA_DIR / "chat_settings.json"
 
 OLLAMA_URL = os.getenv("OLLAMA_CHAT_URL", "http://localhost:11434/api/chat")
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b") 
@@ -79,7 +82,6 @@ except (TypeError, ValueError):
     logger.warning("Invalid MAX_HISTORY environment variable. Using default value 20.")
     MAX_HISTORY = 20
 
-
 # Conversation context & settings ----------------------------------------------------
 chat_histories = {} # {chat_id (int): [{"timestamp": ..., "role": "user"/"assistant", "content": ...}, ...]}
 chat_settings = {} # {chat_id (int): {"model": str, "offset": int}}
@@ -92,6 +94,7 @@ def load_histories():
         logger.info(f"Loaded chat histories.")
     else:
         logger.info("No chat histories found. Starting fresh.")
+    return chat_histories
 
 def save_histories():
     """Saves the current chat histories to a JSON file."""
@@ -179,6 +182,9 @@ async def query_ollama(chat_id: int, prompt: str) -> str:
     visible_history = full_history[offset:]
     recent_history = visible_history[-MAX_HISTORY:] if len(visible_history) > MAX_HISTORY else visible_history
 
+    user_profile = load_user_profile(chat_id)
+    profile_section = f"\n\nUser profile:\n{user_profile}" if user_profile else "" 
+
     system_instruction = {"role": "system", 
                           "content": (
                             "You are a helpful assistant that provides concise and motivating responses based on the user's prompt and conversation history. "
@@ -186,6 +192,7 @@ async def query_ollama(chat_id: int, prompt: str) -> str:
                             "Note: Messages starting with '[Automatic Reminder message]:' may appear in your history."
                             "These were automatically generated. Ignore this prefix in your replies and"
                             "NEVER start your own messages with this prefix. Respond briefly and concisely."
+                            f"{profile_section}" 
                           )
 }
 

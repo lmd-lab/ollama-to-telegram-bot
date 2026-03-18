@@ -8,6 +8,7 @@ Features
       - /help: Get a list of available commands and usage instructions.
       - /stats: View current session statistics (e.g., history size, active model).
    - Smart Reminders: Scheduled prompts sent via systemd timers.
+   - Integrated Memory_ integrates user profile into chat_bot context window
    - Robust Logging: Automatic log rotation in a dedicated /logs directory.
 
 Typical use cases:
@@ -19,17 +20,18 @@ Typical use cases:
 ```text
 .
 ├── bot/
-│   ├── chat_bot.py      # Main interactive bot
-│   ├── reminder.py      # Scheduled reminder script
-│   ├── locks.py         # Shared file lock for concurrent history access
-│   └── utils.py         # Shared utility functions (e.g. safe JSON loading)
-├── logs/                # Local log files (ignored by git)
-├── systemd/             # Service & Timer templates
-├── .env                 # Local configuration  (API keys, etc.)
-├── .gitignore           # Keeps your secrets safe
-├── requirements.txt     # Python dependencies
-├── LICENSE              # MIT License
-└── README.md            # Project documentation
+│   ├── chat_bot.py        # Main interactive bot
+│   ├── reminder.py        # Scheduled reminder script
+│   ├── memory_service.py  # Periodic user profile updates
+│   └── utils.py           # Shared utilities (safe JSON loading, file locks)
+├── data/                  # JSON data files (ignored by git)
+├── logs/                  # Log files (ignored by git)
+├── systemd/               # Service & Timer templates
+├── .env                   # Local configuration  (API keys, etc.)
+├── .gitignore             # Keeps your secrets safe
+├── requirements.txt       # Python dependencies
+├── LICENSE                # MIT License
+└── README.md              # Project documentation
 
 ```
 ## Prerequisites
@@ -83,6 +85,16 @@ sudo cp systemd/ollama_reminder.timer.example /etc/systemd/system/ollama_reminde
 sudo systemctl enable --now ollama_reminder.timer
 ```
 
+3. The Memory (Scheduled)
+
+```bash
+sudo cp systemd/ollama_memory.service.example /etc/systemd/system/ollama_memory.service
+sudo cp systemd/ollama_memory.timer.example /etc/systemd/system/ollama_memory.timer
+# Edit paths in both files
+sudo systemctl enable --now ollama_memory.timer
+```
+
+
 ### Operations & Maintenance
 
 **Check status:**
@@ -102,7 +114,8 @@ sudo systemctl start ollama_reminder.service
 Since we use a dedicated logs/ directory, you can watch the files directly:
 ```bash
 tail -f logs/bot.log
-tail -f logs/generate_script.log
+tail -f logs/reminder.log
+tail -f logs/memory_service.log
 ```
 
 Or use the systemd journal:
@@ -135,6 +148,8 @@ For more information on systemd timer syntax, see `man systemd.time`.
 
     [x] Shared utility module for safe JSON loading
     [x] File locking to prevent race conditions between bot and reminder
+    [x] User memory: periodic profile updates via memory_service.py
+    [x] Memory: integrate user profile into chat_bot context window
 
     [ ] Database Migration: Replace the JSON-based history storage with SQLite to prevent O(n) search operations and memory bottlenecks as the history grows.
     [ ] Data Retention Policy: Implement an automated cleanup logic to prune or archive chat logs older than 30 days.

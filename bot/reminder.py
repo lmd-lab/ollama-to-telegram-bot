@@ -1,37 +1,29 @@
 import os
-import logging
 import json
+import logging
 import time
-import httpx
-from filelock import FileLock, Timeout
-from utils import HISTORY_LOCK
-from utils import safe_load_json
-from logging.handlers import RotatingFileHandler
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Config -----------------------------------------------------------------------------
+import httpx
+from dotenv import load_dotenv
+from filelock import Timeout
+
+from utils import safe_load_json, HISTORY_LOCK
+
+# Paths -----------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=BASE_DIR / ".env")
 
-HISTORY_FILE = BASE_DIR / "chat_history.json"
-# add settings to used selected model
-
 LOG_DIR = BASE_DIR / "logs"
-LOG_FILE = LOG_DIR / "generate_script.log"
-
-OLLAMA_URL = os.getenv("OLLAMA_GENERATE_URL", "http://localhost:11434/api/generate")
-MODEL = os.getenv("OLLAMA_MODEL")
-if not MODEL:
-    raise RuntimeError("OLLAMA_MODEL is not set in .env")
-
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-# Logging ----------------------------------------------------------------------------
+LOG_FILE = LOG_DIR / "reminder.log" 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Logging ----------------------------------------------------------------------------
 file_handler = RotatingFileHandler(
     LOG_FILE, 
     maxBytes=1*1024*1024, 
@@ -46,6 +38,26 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# Environment & Settings ---------------------------------------------------------------
+HISTORY_FILE = DATA_DIR / "chat_history.json"
+# Todo: add settings to used selected model
+
+OLLAMA_URL = os.getenv("OLLAMA_GENERATE_URL", "http://localhost:11434/api/generate")
+MODEL = os.getenv("OLLAMA_MODEL")
+if not MODEL:
+    raise RuntimeError("OLLAMA_MODEL is not set in .env")
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+RAW_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+if RAW_CHAT_ID is None:
+    raise ValueError("TELEGRAM_CHAT_ID environment variable is missing.")
+try:
+    CHAT_ID = int(RAW_CHAT_ID)
+except (TypeError, ValueError):
+    logger.error(f"Invalid TELEGRAM_CHAT_ID: '{RAW_CHAT_ID}' is not a valid integer.")
+    raise RuntimeError("Invalid TELEGRAM_CHAT_ID: must be set to a valid integer in your .env file.")
 
 # Append to history file ------------------------------------------------------------
 def append_to_history(chat_id: str, role: str, content: str):

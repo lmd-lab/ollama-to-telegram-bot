@@ -1,0 +1,9 @@
+[Unit]
+Description=Ollama Memory Service
+
+[Service]
+Type=oneshot
+User=your_user_name
+WorkingDirectory=/absolute/path/to/your/project
+EnvironmentFile=/absolute/path/to/your/project/.env
+ExecStart=/absolute/path/to/.venv/bin/python3 /absolute/path/to/your/project/bot/memory_service.py
