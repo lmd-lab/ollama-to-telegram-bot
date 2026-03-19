@@ -8,7 +8,7 @@ Features
       - /help: Get a list of available commands and usage instructions.
       - /stats: View current session statistics (e.g., history size, active model).
    - Smart Reminders: Scheduled prompts sent via systemd timers.
-   - Integrated Memory_ integrates user profile into chat_bot context window
+   - Integrated Memory: integrates user profile into chat_bot context window
    - Robust Logging: Automatic log rotation in a dedicated /logs directory.
 
 Typical use cases:
